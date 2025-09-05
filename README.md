@@ -5,6 +5,7 @@ A single header C library for writing YUV4MPEG2 (.y4m) video files
 ## Quick Example
 
 ```c
+#define TINYY4MDEF static inline
 #define TINYY4M_IMPLEMENTATION
 #include "tinyy4m.h"
 
@@ -18,18 +19,10 @@ A single header C library for writing YUV4MPEG2 (.y4m) video files
 static uint32_t pixels[WIDTH * HEIGHT];
 static uint8_t Y[N], U[N], V[N];
 
-void fill_pixels(uint32_t color) {
-    for (size_t y = 0; y < HEIGHT; ++y) {
-        for (size_t x = 0; x < WIDTH; ++x) {
-            pixels[y * WIDTH + x] = color;
-        }
-    }
-}
-
 int main() {
-    // FORMAT RRGGBB
-    fill_pixels(0xFF0000);
-    Y4MWriter writer = {0};
+    Y4MWriter writer = {
+        .format =PIXELFORMAT_UNCOMPRESSED_R8G8B8
+    };
     if(y4m_start("out.y4m", &writer, WIDTH, HEIGHT, FPS, Y, U, V) != 0) {
         // LOG ERROR
         return -1;
@@ -41,5 +34,4 @@ int main() {
 
     y4m_end(&writer);
 }
-
 ```

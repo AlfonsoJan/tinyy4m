@@ -14,12 +14,18 @@
 #define TINYY4MDEF
 #endif /* TINYY4MDEF */
 
+typedef enum {
+    PIXELFORMAT_UNCOMPRESSED_R8G8B8 = 1,
+    PIXELFORMAT_UNCOMPRESSED_B8G8R8
+} PixelFormat;
+
 typedef struct {
     FILE *f;
     int width, height;
     uint8_t *y_plane;
     uint8_t *u_plane;
     uint8_t *v_plane;
+    PixelFormat format;
 } Y4MWriter;
 
 TINYY4MDEF int y4m_start(const char *filename, Y4MWriter *w, const int width, const int height, const int fps, uint8_t *y, uint8_t *u, uint8_t *v);
@@ -29,11 +35,10 @@ TINYY4MDEF void y4m_end(Y4MWriter *w);
 #ifdef TINYY4M_IMPLEMENTATION
 
 TINYY4MDEF int y4m_start(const char *filename, Y4MWriter *w, const int width, const int height, const int fps, uint8_t *y, uint8_t *u, uint8_t *v) {
+    if (!w || !y || !u || !v || width <= 0 || height <= 0 || fps <= 0 || w->format == 0) return 1;
 
     w->f = fopen(filename, "wb");
-    if (!w->f) {
-        return 1;
-    }
+    if (!w->f) return 1;
 
     w->width = width;
     w->height = height;
@@ -51,9 +56,19 @@ TINYY4MDEF void y4m_write_frame(Y4MWriter *w, uint32_t *pixels) {
 
     const size_t N = (size_t)w->width * (size_t)w->height;
     for (size_t i = 0; i < N; ++i) {
-        uint8_t r = (pixels[i] >> 16) & 0xFF;
-        uint8_t g = (pixels[i] >> 8) & 0xFF;
-        uint8_t b = (pixels[i] >> 0) & 0xFF;
+        uint8_t r, g, b;
+        switch(w->format) {
+        case PIXELFORMAT_UNCOMPRESSED_R8G8B8:
+            r = (pixels[i] >> 16) & 0xFF;
+            g = (pixels[i] >> 8) & 0xFF;
+            b = (pixels[i] >> 0) & 0xFF;
+            break;
+        case PIXELFORMAT_UNCOMPRESSED_B8G8R8:
+            r = (pixels[i] >> 0) & 0xFF;
+            g = (pixels[i] >> 8) & 0xFF;
+            b = (pixels[i] >> 16) & 0xFF;
+            break;
+        }
 
         float Yf =  0.299f * r + 0.587f * g + 0.114f * b;
         float Uf = -0.169f * r - 0.331f * g + 0.500f * b + 128.0f;

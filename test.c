@@ -21,9 +21,10 @@ void fill_pixels(uint32_t color) {
 }
 
 int main() {
-    // FORMAT RRGGBB
-    fill_pixels(0xFF0000);
-    Y4MWriter writer = {0};
+    fill_pixels(0x00FF00);
+    Y4MWriter writer = {
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8
+    };
     if(y4m_start("out.y4m", &writer, WIDTH, HEIGHT, FPS, Y, U, V) != 0) {
         // LOG ERROR
         return -1;
