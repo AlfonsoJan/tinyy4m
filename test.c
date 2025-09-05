@@ -1,4 +1,5 @@
 #define TINYY4MDEF static inline
+#define TINYY4M_LOG_LEVEL TINYY4M_LOG_TRACE
 #define TINYY4M_IMPLEMENTATION
 #include "tinyy4m.h"
 
@@ -22,11 +23,15 @@ void fill_pixels(uint32_t color) {
 
 int main() {
     fill_pixels(0x00FF00);
-    Y4MWriter writer = {
-        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8
+    Y4MOption opt = {
+        .width = WIDTH,
+        .height = HEIGHT,
+        .fps = 60,
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8,
+        .filename = "output.y4m"
     };
-    if(y4m_start("out.y4m", &writer, WIDTH, HEIGHT, FPS, Y, U, V) != 0) {
-        // LOG ERROR
+    Y4MWriter writer = {0};
+    if(y4m_start(opt, &writer, Y, U, V) != 0) {
         return -1;
     }
 
