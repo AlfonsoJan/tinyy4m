@@ -21,7 +21,7 @@ static uint8_t Y[N], U[N], V[N];
 
 int main() {
     Y4MWriter writer = {
-        .format =PIXELFORMAT_UNCOMPRESSED_R8G8B8
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8
     };
     if(y4m_start("out.y4m", &writer, WIDTH, HEIGHT, FPS, Y, U, V) != 0) {
         // LOG ERROR
