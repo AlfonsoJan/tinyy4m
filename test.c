@@ -1,5 +1,5 @@
 #define TINYY4MDEF static inline
-#define TINYY4M_LOG_LEVEL TINYY4M_LOG_TRACE
+#define TINYY4M_LOG_LEVEL TINYY4M_LOG_DEBUG
 #define TINYY4M_IMPLEMENTATION
 #include "tinyy4m.h"
 
@@ -26,7 +26,7 @@ int main() {
     Y4MOption opt = {
         .width = WIDTH,
         .height = HEIGHT,
-        .fps = 60,
+        .fps = FPS,
         .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8,
         .filename = "output.y4m"
     };

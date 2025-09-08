@@ -60,7 +60,7 @@ typedef struct {
 } Y4MWriter;
 
 TINYY4MDEF int y4m_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, uint8_t *v);
-TINYY4MDEF void y4m_write_frame(Y4MWriter *w, uint32_t *pixels);
+TINYY4MDEF int y4m_write_frame(Y4MWriter *w, uint32_t *pixels);
 TINYY4MDEF void y4m_end(Y4MWriter *w);
 
 #ifdef TINYY4M_IMPLEMENTATION
@@ -120,18 +120,18 @@ TINYY4MDEF int y4m_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, ui
     return 0;
 }
 
-TINYY4MDEF void y4m_write_frame(Y4MWriter *w, uint32_t *pixels) {
+TINYY4MDEF int y4m_write_frame(Y4MWriter *w, uint32_t *pixels) {
     if (!w || !w->f) {
         TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "writer/file is NULL");
-        return;
+        return 1;
     }
     if (!pixels) {
         TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "pixels buffer is NULL");
-        return;
+        return 1;
     }
     if (fprintf(w->f, "FRAME\n") < 0) {
         TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "failed to write frame header");
-        return;
+        return 1;
     }
 
     switch (w->opt.format) {
@@ -180,9 +180,10 @@ TINYY4MDEF void y4m_write_frame(Y4MWriter *w, uint32_t *pixels) {
 
     if (wroteY != N || wroteU != N || wroteV != N) {
         TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "short write (Y=%zu/%zu, U=%zu/%zu, V=%zu/%zu)", wroteY, N, wroteU, N, wroteV, N);
-    } else {
-        TINYY4M_TRACELOG(TINYY4M_LOG_DEBUG, "wrote %zu bytes (YUV444)", 3 * N);
+        return 1;
     }
+    TINYY4M_TRACELOG(TINYY4M_LOG_TRACE, "wrote %zu bytes (YUV444)", 3 * N);
+    return 0;
 }
 
 TINYY4MDEF void y4m_end(Y4MWriter *w) {
@@ -197,8 +198,6 @@ TINYY4MDEF void y4m_end(Y4MWriter *w) {
     } else {
         TINYY4M_TRACELOG(TINYY4M_LOG_WARNING, "file already closed or was never opened");
     }
-    // fclose(w->f);
-    // w->f = NULL;
 }
 
 #endif // TINYY4M_IMPLEMENTATION
