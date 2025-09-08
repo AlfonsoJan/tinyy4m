@@ -6,6 +6,7 @@ A single header C library for writing YUV4MPEG2 (.y4m) video files
 
 ```c
 #define TINYY4MDEF static inline
+#define TINYY4M_LOG_LEVEL TINYY4M_LOG_DEBUG
 #define TINYY4M_IMPLEMENTATION
 #include "tinyy4m.h"
 
@@ -20,11 +21,15 @@ static uint32_t pixels[WIDTH * HEIGHT];
 static uint8_t Y[N], U[N], V[N];
 
 int main() {
-    Y4MWriter writer = {
-        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8
+    Y4MOption opt = {
+        .width = WIDTH,
+        .height = HEIGHT,
+        .fps = FPS,
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8,
+        .filename = "output.y4m"
     };
-    if(y4m_start("out.y4m", &writer, WIDTH, HEIGHT, FPS, Y, U, V) != 0) {
-        // LOG ERROR
+    Y4MWriter writer = {0};
+    if(y4m_start(opt, &writer, Y, U, V) != 0) {
         return -1;
     }
 
@@ -34,4 +39,5 @@ int main() {
 
     y4m_end(&writer);
 }
+
 ```
