@@ -21,7 +21,7 @@ void fill_pixels(uint32_t color) {
     }
 }
 
-int main() {
+int main(void) {
     fill_pixels(0x00FF00);
     Y4MOption opt = {
         .width = WIDTH,
@@ -31,7 +31,7 @@ int main() {
         .filename = "output.y4m"
     };
     Y4MWriter writer = {0};
-    if(y4m_start(opt, &writer, Y, U, V) != 0) {
+    if(y4m_write_start(opt, &writer, Y, U, V) != 0) {
         return -1;
     }
 
@@ -39,5 +39,5 @@ int main() {
         y4m_write_frame(&writer, pixels);
     }
 
-    y4m_end(&writer);
+    y4m_write_end(&writer);
 }

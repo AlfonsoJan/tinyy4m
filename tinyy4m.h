@@ -60,9 +60,9 @@ typedef struct {
     uint8_t *v_plane;
 } Y4MWriter;
 
-TINYY4MDEF int y4m_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, uint8_t *v);
+TINYY4MDEF int y4m_write_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, uint8_t *v);
 TINYY4MDEF int y4m_write_frame(Y4MWriter *w, uint32_t *pixels);
-TINYY4MDEF void y4m_end(Y4MWriter *w);
+TINYY4MDEF void y4m_write_end(Y4MWriter *w);
 
 typedef struct {
     int width, height, fps;
@@ -112,7 +112,7 @@ TINYY4MDEF void y4m__trace_log(int level, const char *file, int line, const char
     TINYY4M_LOG_HANDLER(level, buf);
 }
 
-TINYY4MDEF int y4m_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, uint8_t *v) {
+TINYY4MDEF int y4m_write_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, uint8_t *v) {
     if (!w) {
         TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "writer pointer is NULL");
         return 1;
@@ -218,7 +218,7 @@ TINYY4MDEF int y4m_write_frame(Y4MWriter *w, uint32_t *pixels) {
     return 0;
 }
 
-TINYY4MDEF void y4m_end(Y4MWriter *w) {
+TINYY4MDEF void y4m_write_end(Y4MWriter *w) {
     if (!w) return;
     if (w->f) {
         if (fclose(w->f) != 0) {
