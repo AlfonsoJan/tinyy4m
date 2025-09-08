@@ -6,7 +6,6 @@ A single header C library for writing YUV4MPEG2 (.y4m) video files
 
 ```c
 #define TINYY4MDEF static inline
-#define TINYY4M_LOG_LEVEL TINYY4M_LOG_DEBUG
 #define TINYY4M_IMPLEMENTATION
 #include "tinyy4m.h"
 

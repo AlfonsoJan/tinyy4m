@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 #ifndef TINYY4MDEF
 /*
@@ -63,7 +64,38 @@ TINYY4MDEF int y4m_start(Y4MOption opt, Y4MWriter *w, uint8_t *y, uint8_t *u, ui
 TINYY4MDEF int y4m_write_frame(Y4MWriter *w, uint32_t *pixels);
 TINYY4MDEF void y4m_end(Y4MWriter *w);
 
+typedef struct {
+    int width, height, fps;
+    int frames;
+    size_t frame_size;
+    size_t total_bytes;
+    long data_offset;
+} Y4MProbe;
+
+TINYY4MDEF int y4m_probe_file(const char *filename, Y4MProbe *probe);
+TINYY4MDEF int y4m_read_into_buffer(const char *filename, const Y4MProbe *probe, uint8_t *dst, size_t dst_size);
+TINYY4MDEF int y4m_planes_from_buffer(const Y4MProbe *probe, const uint8_t *base, int frame_index, uint8_t **Y, uint8_t **U, uint8_t **V);
+
 #ifdef TINYY4M_IMPLEMENTATION
+
+int my_strcmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return (unsigned char) * s1 - (unsigned char) * s2;
+}
+
+int my_strncmp(const char *s1, const char *s2, size_t n) {
+    if (n == 0)
+        return 0;
+
+    while (--n && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return (unsigned char) * s1 - (unsigned char) * s2;
+}
 
 TINYY4MDEF void y4m__trace_log(int level, const char *file, int line, const char *fmt, ...) {
     if (level < TINYY4M_LOG_LEVEL || level >= TINYY4M_LOG_NONE) return;
@@ -198,6 +230,229 @@ TINYY4MDEF void y4m_end(Y4MWriter *w) {
     } else {
         TINYY4M_TRACELOG(TINYY4M_LOG_WARNING, "file already closed or was never opened");
     }
+}
+
+TINYY4MDEF int _y4m_read_line(FILE *f, char *buf, size_t cap) {
+    if (!fgets(buf, (int)cap, f)) return 1;
+    return 0;
+}
+
+TINYY4MDEF int _y4m_starts_with_frame(const char *s) {
+    return (s[0] == 'F' && s[1] == 'R' && s[2] == 'A' && s[3] == 'M' && s[4] == 'E') ? 1 : 0;
+}
+
+TINYY4MDEF int _y4m_parse_header_line(const char *line, int *W, int *H, int *Fnum, int *Fden, char *I, int *A_num, int *A_den, char *Cbuf, size_t Cbuf_sz) {
+    if (my_strncmp(line, "YUV4MPEG2", 9) != 0) return 1;
+
+    *W = *H = *Fnum = *Fden = 0;
+    *I = 0;
+    *A_num = *A_den = 0;
+    if (Cbuf && Cbuf_sz) Cbuf[0] = '\0';
+
+    const char *p = line + 9;
+    while (*p) {
+        while (*p == ' ' || *p == '\t') ++p;
+        if (*p == '\0' || *p == '\n' || *p == '\r') break;
+
+        if (*p == 'W') {
+            ++p;
+            *W = (int)strtol(p, (char**)&p, 10);
+        } else if (*p == 'H') {
+            ++p;
+            *H = (int)strtol(p, (char**)&p, 10);
+        } else if (*p == 'F') {
+            ++p;
+            *Fnum = (int)strtol(p, (char**)&p, 10);
+            if (*p == ':') {
+                ++p;
+                *Fden = (int)strtol(p, (char**)&p, 10);
+            }
+        } else if (*p == 'I') {
+            ++p;
+            *I = *p ? *p++ : 0;
+        } else if (*p == 'A') {
+            ++p;
+            *A_num = (int)strtol(p, (char**)&p, 10);
+            if (*p == ':') {
+                ++p;
+                *A_den = (int)strtol(p, (char**)&p, 10);
+            }
+        } else if (*p == 'C') {
+            ++p;
+            size_t n = 0;
+            while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && n + 1 < Cbuf_sz) {
+                Cbuf[n++] = *p++;
+            }
+            if (Cbuf && Cbuf_sz) Cbuf[n] = '\0';
+        } else {
+            /* skip unknown token */
+            while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') ++p;
+        }
+    }
+    return 0;
+}
+
+TINYY4MDEF int y4m_probe_file(const char *filename, Y4MProbe *probe) {
+    if (!filename || !probe) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "y4m_probe_file: bad args");
+        return 1;
+    }
+
+    FILE *f = fopen(filename, "rb");
+    if (!f) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "failed to open '%s'", filename);
+        return 1;
+    }
+
+    char line[1024];
+    if (_y4m_read_line(f, line, sizeof(line))) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "failed to read header line");
+        fclose(f);
+        return 1;
+    }
+
+    int W, H, Fnum, Fden, A_num, A_den;
+    char I, Cbuf[32];
+    if (_y4m_parse_header_line(line, &W, &H, &Fnum, &Fden, &I, &A_num, &A_den, Cbuf, sizeof(Cbuf))) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "bad header (no YUV4MPEG2 magic)");
+        fclose(f);
+        return 1;
+    }
+
+    if (W <= 0 || H <= 0 || Fnum <= 0 || Fden <= 0) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "invalid WH/F (%d x %d, F=%d:%d)", W, H, Fnum, Fden);
+        fclose(f);
+        return 1;
+    }
+    if (!(I == 'p' || I == 'P')) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "only progressive (Ip) supported, got I%c", I ? I : '?');
+        fclose(f);
+        return 1;
+    }
+    if (!(A_num == 1 && A_den == 1)) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "only A1:1 supported, got A%d:%d", A_num, A_den);
+        fclose(f);
+        return 1;
+    }
+    /* Accept "C444" or sometimes parsers store just "444" after C token */
+    if (!(my_strcmp(Cbuf, "444") == 0 || my_strcmp(Cbuf, "C444") == 0)) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "only C444 supported, got '%s'", Cbuf);
+        fclose(f);
+        return 1;
+    }
+    if (Fden != 1) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "only integer fps (F%d:1) supported", Fnum);
+        fclose(f);
+        return 1;
+    }
+
+    long after_header_pos = ftell(f);
+    if (after_header_pos < 0) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "ftell after header failed");
+        fclose(f);
+        return 1;
+    }
+
+    const size_t planeN = (size_t)W * (size_t)H;
+    const size_t frame_size = planeN * 3u;
+
+    int frames = 0;
+    for (;;) {
+        if (_y4m_read_line(f, line, sizeof(line))) break; /* EOF reached */
+        /* Ignore blank lines */
+        int blank = 1;
+        for (char *p = line; *p; ++p) if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
+                blank = 0;
+                break;
+            }
+        if (blank) continue;
+
+        if (!_y4m_starts_with_frame(line)) {
+            TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "unexpected line where FRAME expected");
+            fclose(f);
+            return 1;
+        }
+        if (fseek(f, (long)frame_size, SEEK_CUR) != 0) {
+            TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "truncated frame while counting");
+            fclose(f);
+            return 1;
+        }
+        frames++;
+    }
+
+    fclose(f);
+
+    probe->width = W;
+    probe->height = H;
+    probe->fps = Fnum;
+    probe->frames = frames;
+    probe->frame_size = frame_size;
+    probe->total_bytes = (size_t)frames * frame_size;
+    probe->data_offset = after_header_pos;
+
+    TINYY4M_TRACELOG(TINYY4M_LOG_INFO, "probe '%s': %dx%d F%d:1 Ip A1:1 C444, frames=%d, bytes=%zu", filename, W, H, Fnum, frames, probe->total_bytes);
+    return 0;
+}
+
+TINYY4MDEF int y4m_read_into_buffer(const char *filename, const Y4MProbe *probe, uint8_t *dst, size_t dst_size) {
+    if (!filename || !probe || !dst) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "y4m_read_into_buffer: bad args");
+        return 1;
+    }
+    if (probe->total_bytes > dst_size) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "buffer too small: need %zu, have %zu", probe->total_bytes, dst_size);
+        return 1;
+    }
+
+    FILE *f = fopen(filename, "rb");
+    if (!f) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "failed to open '%s'", filename);
+        return 1;
+    }
+
+    if (fseek(f, probe->data_offset, SEEK_SET) != 0) {
+        TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "fseek to data offset failed");
+        fclose(f);
+        return 1;
+    }
+
+    char line[1024];
+    uint8_t *p = dst;
+    const size_t frame_size = probe->frame_size;
+
+    for (int i = 0; i < probe->frames; ++i) {
+        if (_y4m_read_line(f, line, sizeof(line))) {
+            TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "unexpected EOF before frame %d", i);
+            fclose(f);
+            return 1;
+        }
+        if (!_y4m_starts_with_frame(line)) {
+            TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "expected FRAME header at frame %d", i);
+            fclose(f);
+            return 1;
+        }
+        size_t got = fread(p, 1, frame_size, f);
+        if (got != frame_size) {
+            TINYY4M_TRACELOG(TINYY4M_LOG_ERROR, "short read on frame %d (%zu/%zu)", i, got, frame_size);
+            fclose(f);
+            return 1;
+        }
+        p += frame_size;
+    }
+
+    fclose(f);
+    TINYY4M_TRACELOG(TINYY4M_LOG_INFO, "read '%s' into buffer (%d frames, %zu bytes)", filename, probe->frames, probe->total_bytes);
+    return 0;
+}
+
+TINYY4MDEF int y4m_planes_from_buffer(const Y4MProbe *probe, const uint8_t *base, int frame_index, uint8_t **Y, uint8_t **U, uint8_t **V) {
+    if (!probe || !base || frame_index < 0 || frame_index >= probe->frames) return 1;
+    const size_t planeN = (size_t)probe->width * (size_t)probe->height;
+    const uint8_t *frame = base + (size_t)frame_index * probe->frame_size;
+    if (Y) *Y = (uint8_t * )(frame);
+    if (U) *U = (uint8_t * )(frame + planeN);
+    if (V) *V = (uint8_t * )(frame + 2 * planeN);
+    return 0;
 }
 
 #endif // TINYY4M_IMPLEMENTATION

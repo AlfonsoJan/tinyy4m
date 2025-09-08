@@ -1,7 +1,7 @@
 #define TINYY4MDEF static inline
 #define TINYY4M_LOG_LEVEL TINYY4M_LOG_DEBUG
 #define TINYY4M_IMPLEMENTATION
-#include "tinyy4m.h"
+#include "../tinyy4m.h"
 
 #define WIDTH 1600
 #define HEIGHT 900
